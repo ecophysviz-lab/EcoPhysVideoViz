@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "EcoPhysVideoViz"
+version = "0.1.0"
+description = "Synchronized biologging data + video visualization dashboard"
+authors = [
+  { name = "Jessica Kendall-Bar", email = "jkendallbar@ucsd.edu" },
+]
+requires-python = ">=3.10"
+dependencies = [
+  "DiveDB @ git+https://github.com/ecophysviz-lab/DiveDB.git",
+  "dash==3.1.1",
+  "dash-bootstrap-components==2.0.3",
+  "dash-extensions==1.0.20",
+  "plotly_resampler==0.11.0",
+  "python-dotenv",
+  "pandas",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "dash[testing]",
+]
