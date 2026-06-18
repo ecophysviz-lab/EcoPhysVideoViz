@@ -25,3 +25,6 @@ dev = [
   "pytest",
   "dash[testing]",
 ]
+
+[tool.setuptools.packages.find]
+exclude = ["layout*", "assets*", "improvements*", "video_preview*", "three_js_orientation*"]
