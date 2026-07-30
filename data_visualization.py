@@ -33,6 +33,14 @@ from DiveDB.services import ImmichService
 
 load_dotenv()
 
+# Warehouse source toggle: set WAREHOUSE_SOURCE=local in .env to use the local
+# SSD iceberg warehouse instead of S3. Defaults to "s3".
+_warehouse_source = os.getenv("WAREHOUSE_SOURCE", "s3").strip().lower()
+if _warehouse_source == "local":
+    # Load LOCAL_ICEBERG_PATH from DiveDB/.env (one level up from EcoPhysVideoViz)
+    _divedb_env = Path(__file__).parent.parent / "DiveDB" / ".env"
+    load_dotenv(_divedb_env, override=False)
+
 # Cache toggle - set via DASH_USE_CACHE environment variable
 USE_CACHE = os.getenv("DASH_USE_CACHE", "false").lower() in ("true", "1", "yes")
 
@@ -64,7 +72,15 @@ app = DashProxy(
 )
 
 # Initialize services (will be passed to callbacks)
-duck_pond = DuckPond.from_environment(notion_manager=notion_manager)
+if _warehouse_source == "local":
+    _local_path = os.getenv("LOCAL_ICEBERG_PATH") or os.getenv("CONTAINER_ICEBERG_PATH")
+    duck_pond = DuckPond(
+        warehouse_path=_local_path,
+        notion_manager=notion_manager,
+        catalog_type=os.getenv("ICEBERG_CATALOG_TYPE", "auto"),
+    )
+else:
+    duck_pond = DuckPond.from_environment(notion_manager=notion_manager)
 immich_service = ImmichService()
 
 # Datasets will be loaded on page load via callback, not at server startup

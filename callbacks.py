@@ -322,78 +322,6 @@ def register_callbacks(app, video_options=None, channel_options=None):
     @app.callback(
         Output("selected-video", "data", allow_duplicate=True),
         Output("manual-video-override", "data", allow_duplicate=True),
-        [
-            Input({"type": "video-indicator", "id": ALL}, "n_clicks"),
-            Input({"type": "video-pin-dot", "id": ALL}, "n_clicks"),
-        ],
-        [
-            State("current-video-options", "data"),
-            State({"type": "video-indicator", "id": ALL}, "id"),
-            State({"type": "video-pin-dot", "id": ALL}, "id"),
-        ],
-        prevent_initial_call=True,
-    )
-    def video_manual_selection(
-        indicator_clicks,
-        pin_dot_clicks,
-        video_options,
-        video_ids,
-        pin_dot_ids,
-    ):
-        """Handle manual video selection when user clicks a timeline video control."""
-        ctx = callback_context
-
-        # Debug: Log callback entry
-        logger.debug("video_manual_selection triggered:")
-        logger.debug(f"  - ctx.triggered: {ctx.triggered}")
-        logger.debug(f"  - indicator_clicks: {indicator_clicks}")
-        logger.debug(f"  - pin_dot_clicks: {pin_dot_clicks}")
-        logger.debug(f"  - video_ids: {video_ids}")
-        logger.debug(f"  - pin_dot_ids: {pin_dot_ids}")
-        logger.debug(
-            f"  - video_options count: {len(video_options) if video_options else 0}"
-        )
-
-        if not video_options:
-            logger.debug("  - PreventUpdate: no video_options")
-            raise dash.exceptions.PreventUpdate
-
-        # Check if this was triggered by a manual click
-        clicked_video = None
-
-        for trigger in ctx.triggered:
-            if (
-                "video-indicator" in trigger["prop_id"]
-                or "video-pin-dot" in trigger["prop_id"]
-            ) and trigger.get("value"):
-                # Extract the clicked video ID from the trigger
-                import json
-
-                trigger_id = json.loads(trigger["prop_id"].split(".")[0])
-                clicked_video_id = trigger_id["id"]
-
-                # Find the corresponding video in video_options
-                for vid in video_options:
-                    if vid.get("id") == clicked_video_id:
-                        clicked_video = vid
-                        break
-
-                if not clicked_video:
-                    logger.warning(
-                        f"No matching video found for ID: {clicked_video_id}"
-                    )
-                break
-
-        if clicked_video:
-            # Manual selection - set both selected video and manual override
-            logger.debug(f"  - Manual selection: {clicked_video.get('filename')}")
-            return clicked_video, clicked_video
-        else:
-            # No valid click detected
-            logger.debug("  - PreventUpdate: no valid click")
-            raise dash.exceptions.PreventUpdate
-
-    @app.callback(
         Output("playhead-time", "data", allow_duplicate=True),
         Output("is-playing", "data", allow_duplicate=True),
         Output("play-button", "children", allow_duplicate=True),
@@ -410,7 +338,7 @@ def register_callbacks(app, video_options=None, channel_options=None):
         ],
         prevent_initial_call=True,
     )
-    def jump_to_video_on_click(
+    def video_indicator_click(
         indicator_clicks,
         pin_dot_clicks,
         video_options,
@@ -418,74 +346,43 @@ def register_callbacks(app, video_options=None, channel_options=None):
         pin_dot_ids,
         time_offset,
     ):
-        """Jump playhead to video start and play when segment or pin dot is clicked."""
+        """Handle clicking a video indicator or pin dot: select video, jump playhead, start playing."""
         ctx = callback_context
 
-        # Debug: Log callback entry
-        logger.debug("jump_to_video_on_click triggered:")
-        logger.debug(f"  - ctx.triggered: {ctx.triggered}")
-        logger.debug(f"  - indicator_clicks: {indicator_clicks}")
-        logger.debug(f"  - pin_dot_clicks: {pin_dot_clicks}")
-        logger.debug(f"  - video_ids: {video_ids}")
-        logger.debug(f"  - pin_dot_ids: {pin_dot_ids}")
-        logger.debug(
-            f"  - video_options count: {len(video_options) if video_options else 0}"
-        )
+        logger.debug("video_indicator_click triggered")
 
         if not video_options or not ctx.triggered:
-            logger.debug("  - PreventUpdate: no video_options or no trigger")
             raise dash.exceptions.PreventUpdate
 
         time_offset = time_offset or 0
 
-        # Check if this was triggered by a video indicator or pin dot click
         clicked_video = None
         for trigger in ctx.triggered:
-            logger.debug(f"  - Checking trigger: {trigger}")
             if (
                 "video-indicator" in trigger["prop_id"]
                 or "video-pin-dot" in trigger["prop_id"]
             ) and trigger.get("value"):
-                # Extract the clicked video ID from the trigger
                 import json
-
                 trigger_id = json.loads(trigger["prop_id"].split(".")[0])
                 clicked_video_id = trigger_id["id"]
-                logger.debug(
-                    f"  - Extracted video ID: {clicked_video_id} (type: {type(clicked_video_id)})"
-                )
-
-                # Find the corresponding video in video_options
-                video_option_ids = [vid.get("id") for vid in video_options]
-                logger.debug(f"  - Available video IDs in options: {video_option_ids}")
-
                 for vid in video_options:
                     if vid.get("id") == clicked_video_id:
                         clicked_video = vid
-                        logger.debug(f"  - Found matching video: {vid.get('filename')}")
                         break
-
                 if clicked_video:
                     break
-            else:
-                logger.debug("  - Trigger not a timeline video click or value is falsy")
 
         if not clicked_video:
-            logger.debug("  - PreventUpdate: no clicked_video found")
             raise dash.exceptions.PreventUpdate
 
-        # Calculate the video start time
         video_start_time = parse_video_created_time(clicked_video.get("fileCreatedAt"))
-
-        # Apply time offset to get the adjusted start time
         adjusted_video_start = video_start_time + time_offset
 
-        logger.info(
-            f"Jumping to video start: {clicked_video.get('filename')} at {adjusted_video_start}"
-        )
+        logger.info(f"Video click: {clicked_video.get('filename')} → playhead {adjusted_video_start}")
 
-        # Return: new playhead time, playing=True, button text="Pause", button class
         return (
+            clicked_video,
+            clicked_video,
             adjusted_video_start,
             True,
             "Pause",

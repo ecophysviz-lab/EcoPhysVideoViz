@@ -3,10 +3,13 @@ Selection callbacks for dataset, deployment, and date range selection.
 """
 
 import dash
-from dash import Output, Input, State, html, callback_context, no_update, ALL
-import pandas as pd
+import inspect
 import time
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
+
+import pandas as pd
+from dash import Output, Input, State, html, callback_context, no_update, ALL
 from logging_config import get_logger
 from dash_extensions.enrich import Serverside
 from layout import (
@@ -19,6 +22,86 @@ from graph_utils import plot_tag_data_interactive
 from plotly_resampler import FigureResampler
 
 logger = get_logger(__name__)
+
+
+def get_3d_model_for_organism(
+    duck_pond: Any, organism_id: str, use_cache: bool = False
+) -> dict[str, Any]:
+    """
+    Fetch 3D model info from either the new organism API or the legacy animal API.
+
+    Some local environments may still have an older installed DiveDB package while the
+    app source has migrated to organism terminology.
+    """
+    if hasattr(duck_pond, "get_3d_model_for_organism"):
+        model_info = duck_pond.get_3d_model_for_organism(
+            organism_id, use_cache=use_cache
+        )
+    elif hasattr(duck_pond, "get_3d_model_for_animal"):
+        logger.warning(
+            "Using deprecated DuckPond.get_3d_model_for_animal; reinstall DiveDB "
+            "to use get_3d_model_for_organism."
+        )
+        model_info = duck_pond.get_3d_model_for_animal(organism_id, use_cache=use_cache)
+    else:
+        raise AttributeError(
+            "DuckPond has neither get_3d_model_for_organism nor "
+            "get_3d_model_for_animal."
+        )
+
+    return model_info or {}
+
+
+def write_event_for_organism(
+    duck_pond: Any,
+    *,
+    dataset: str,
+    deployment: str,
+    organism: str,
+    event_key: str,
+    datetime_start: Any,
+    datetime_end: Any,
+    short_description: str | None,
+    long_description: str | None,
+) -> None:
+    """Write an event using the canonical organism argument or legacy animal argument."""
+    write_event_signature = inspect.signature(duck_pond.write_event)
+    organism_param = (
+        "organism"
+        if "organism" in write_event_signature.parameters
+        else "animal"
+    )
+    if organism_param == "animal":
+        logger.warning(
+            "Using deprecated DuckPond.write_event animal argument; reinstall DiveDB "
+            "to use organism."
+        )
+
+    duck_pond.write_event(
+        dataset=dataset,
+        deployment=deployment,
+        **{organism_param: organism},
+        event_key=event_key,
+        datetime_start=datetime_start,
+        datetime_end=datetime_end,
+        short_description=short_description,
+        long_description=long_description,
+    )
+
+
+def get_deployment_organism(deployment: dict[str, Any], default: Any = None) -> Any:
+    """
+    Read the organism ID from a deployment record returned by DuckPond.
+
+    DuckPond.get_all_datasets_and_deployments() emits "organism" after the
+    animal->organism rename; older installed DiveDB packages emit "animal".
+    Accept either so the app works against both.
+    """
+    if "organism" in deployment:
+        return deployment["organism"]
+    if "animal" in deployment:
+        return deployment["animal"]
+    return default
 
 
 class DataPkl:
@@ -348,7 +431,7 @@ def generate_graph_from_channels(
     duck_pond,
     dataset,
     deployment_id,
-    animal_id,
+    organism_id,
     date_range,
     timezone_offset,
     selected_channels,
@@ -365,7 +448,7 @@ def generate_graph_from_channels(
         duck_pond: DuckPond instance
         dataset: Dataset identifier
         deployment_id: Deployment identifier
-        animal_id: Animal identifier
+        organism_id: Organism identifier
         date_range: Dict with 'start' and 'end' datetime strings
         timezone_offset: Timezone offset in hours
         selected_channels: List of channel identifiers (can be group names or individual labels)
@@ -538,7 +621,7 @@ def generate_graph_from_channels(
     dff = duck_pond.get_data(
         dataset=dataset,
         deployment_ids=deployment_id,
-        animal_ids=animal_id,
+        animal_ids=organism_id,
         date_range=(date_range["start"], date_range["end"]),
         max_frequency=MAX_FREQUENCY_HZ,  # Use new optimized parameter
         labels=labels_to_load,
@@ -929,14 +1012,15 @@ def register_selection_callbacks(app, duck_pond, immich_service, use_cache=False
 
             selected_deployment = deployments_data[idx]
             logger.info(
-                f"Selected deployment: {selected_deployment['animal']} ({selected_deployment['deployment']}) from dataset {dataset}"
+                f"Selected deployment: {get_deployment_organism(selected_deployment)} "
+                f"({selected_deployment['deployment']}) from dataset {dataset}"
             )
 
             # Now load the visualization for this deployment
             import plotly.graph_objects as go
 
             deployment_id = selected_deployment["deployment"]
-            animal_id = selected_deployment["animal"]
+            organism_id = get_deployment_organism(selected_deployment)
 
             # Start video fetch immediately in background thread
             # This runs in parallel with DuckDB operations below
@@ -1029,7 +1113,7 @@ def register_selection_callbacks(app, duck_pond, immich_service, use_cache=False
                     duck_pond=duck_pond,
                     dataset=dataset,
                     deployment_id=deployment_id,
-                    animal_id=animal_id,
+                    organism_id=organism_id,
                     date_range=date_range,
                     timezone_offset=timezone_offset,
                     selected_channels=selected_channels,
@@ -1042,7 +1126,7 @@ def register_selection_callbacks(app, duck_pond, immich_service, use_cache=False
                 try:
                     events_df = duck_pond.get_events(
                         dataset=dataset,
-                        animal_ids=animal_id,
+                        animal_ids=organism_id,
                         date_range=(date_range["start"], date_range["end"]),
                         apply_timezone_offset=timezone_offset,
                         add_timestamp_columns=True,
@@ -1072,7 +1156,7 @@ def register_selection_callbacks(app, duck_pond, immich_service, use_cache=False
 
             # Generate deployment info display
             deployment_info_html = create_deployment_info_display(
-                animal_id=animal_id,
+                organism_id=organism_id,
                 deployment_date=selected_deployment["deployment_date"],
                 icon_url=selected_deployment.get("icon_url", "/assets/images/seal.svg"),
             )
@@ -1107,9 +1191,9 @@ def register_selection_callbacks(app, duck_pond, immich_service, use_cache=False
                 model_data_json = empty_df.to_json(orient="split")
                 logger.debug("3D model data prepared WITHOUT orientation (empty)")
 
-            # Get 3D model file URL from Notion (Animal→Asset→Best-3D-model)
-            model_info = duck_pond.get_3d_model_for_animal(
-                animal_id, use_cache=use_cache
+            # Get 3D model file URL from Notion (Organism→Asset→Best-3D-model)
+            model_info = get_3d_model_for_organism(
+                duck_pond, organism_id, use_cache=use_cache
             )
             model_file_url = (
                 model_info.get("model_url") or ""
@@ -1118,7 +1202,7 @@ def register_selection_callbacks(app, duck_pond, immich_service, use_cache=False
                 model_info.get("texture_url") or ""
             )  # Empty string = no texture
             logger.info(
-                f"3D model for animal '{animal_id}': {model_info.get('model_filename', 'none')} ({model_info.get('filetype', 'none')})"
+                f"3D model for organism '{organism_id}': {model_info.get('model_filename', 'none')} ({model_info.get('filetype', 'none')})"
                 + (
                     f" with texture {model_info.get('texture_filename')}"
                     if model_info.get("texture_url")
@@ -1165,10 +1249,23 @@ def register_selection_callbacks(app, duck_pond, immich_service, use_cache=False
                     f"Found {len(available_events)} unique event types: {unique_event_keys}"
                 )
 
-            # Calculate initial timeline bounds from timestamps
-            initial_bounds = (
-                {"min": timestamps[0], "max": timestamps[-1]} if timestamps else None
-            )
+            # Calculate initial timeline bounds from timestamps, extended back to
+            # cover any videos that start before the sensor data begins.
+            if timestamps:
+                bounds_min = timestamps[0]
+                for _v in (video_options or []):
+                    _created = _v.get("fileCreatedAt", "")
+                    if _created:
+                        try:
+                            from datetime import datetime as _dt
+                            _vts = _dt.fromisoformat(_created.replace("Z", "+00:00")).timestamp()
+                            if _vts < bounds_min:
+                                bounds_min = _vts
+                        except Exception:
+                            pass
+                initial_bounds = {"min": bounds_min, "max": timestamps[-1]}
+            else:
+                initial_bounds = None
 
             return (
                 selected_deployment,
@@ -1300,13 +1397,16 @@ def register_selection_callbacks(app, duck_pond, immich_service, use_cache=False
 
         # Get deployment details
         deployment_id = deployment_data["deployment"]
-        animal_id = deployment_data["animal"]
+        organism_id = get_deployment_organism(deployment_data)
 
         # Find full deployment data for sample_count
         deployments_list = datasets_with_deployments.get(dataset, [])
         selected_deployment = None
         for dep in deployments_list:
-            if dep["deployment"] == deployment_id and dep["animal"] == animal_id:
+            if (
+                dep["deployment"] == deployment_id
+                and get_deployment_organism(dep) == organism_id
+            ):
                 selected_deployment = dep
                 break
 
@@ -1362,7 +1462,7 @@ def register_selection_callbacks(app, duck_pond, immich_service, use_cache=False
             try:
                 events_df = duck_pond.get_events(
                     dataset=dataset,
-                    animal_ids=animal_id,
+                    animal_ids=organism_id,
                     date_range=(date_range["start"], date_range["end"]),
                     apply_timezone_offset=timezone_offset,
                     add_timestamp_columns=True,
@@ -1380,7 +1480,7 @@ def register_selection_callbacks(app, duck_pond, immich_service, use_cache=False
             duck_pond=duck_pond,
             dataset=dataset,
             deployment_id=deployment_id,
-            animal_id=animal_id,
+            organism_id=organism_id,
             date_range=date_range,
             timezone_offset=timezone_offset,
             selected_channels=channel_values,
@@ -1420,7 +1520,7 @@ def register_selection_callbacks(app, duck_pond, immich_service, use_cache=False
         logger.info("Refreshing event timeline indicators after event creation")
 
         deployment_id = deployment_data["deployment"]
-        animal_id = deployment_data["animal"]
+        organism_id = get_deployment_organism(deployment_data)
 
         # Get timezone offset (cached)
         timezone_offset = duck_pond.get_deployment_timezone_offset(
@@ -1437,7 +1537,7 @@ def register_selection_callbacks(app, duck_pond, immich_service, use_cache=False
         try:
             events_df = duck_pond.get_events(
                 dataset=dataset,
-                animal_ids=animal_id,
+                animal_ids=organism_id,
                 date_range=(date_range_start, date_range_end),
                 apply_timezone_offset=timezone_offset,
                 add_timestamp_columns=True,
@@ -1960,13 +2060,16 @@ def register_selection_callbacks(app, duck_pond, immich_service, use_cache=False
         try:
             # Get deployment details
             deployment_id = deployment_data["deployment"]
-            animal_id = deployment_data["animal"]
+            organism_id = get_deployment_organism(deployment_data)
 
             # Find full deployment data for sample_count and date range
             deployments_list = datasets_with_deployments.get(dataset, [])
             selected_deployment = None
             for dep in deployments_list:
-                if dep["deployment"] == deployment_id and dep["animal"] == animal_id:
+                if (
+                    dep["deployment"] == deployment_id
+                    and get_deployment_organism(dep) == organism_id
+                ):
                     selected_deployment = dep
                     break
 
@@ -1996,7 +2099,7 @@ def register_selection_callbacks(app, duck_pond, immich_service, use_cache=False
                 duck_pond=duck_pond,
                 dataset=dataset,
                 deployment_id=deployment_id,
-                animal_id=animal_id,
+                organism_id=organism_id,
                 date_range=date_range,
                 timezone_offset=timezone_offset,
                 selected_channels=selected_channels,
@@ -2107,12 +2210,12 @@ def register_selection_callbacks(app, duck_pond, immich_service, use_cache=False
                 logger.warning(f"Failed to parse end time '{end_time_str}': {e}")
                 # Continue with point event
 
-        # Get deployment and animal info
+        # Get deployment and organism info
         deployment_id = selected_deployment.get("deployment", "")
-        animal_id = selected_deployment.get("animal", "")
+        organism_id = get_deployment_organism(selected_deployment, "")
 
-        if not deployment_id or not animal_id:
-            logger.error("Missing deployment or animal ID")
+        if not deployment_id or not organism_id:
+            logger.error("Missing deployment or organism ID")
             raise dash.exceptions.PreventUpdate
 
         # Get timezone offset to convert from local display time back to UTC
@@ -2133,10 +2236,11 @@ def register_selection_callbacks(app, duck_pond, immich_service, use_cache=False
 
         # Write the event to Iceberg
         try:
-            duck_pond.write_event(
+            write_event_for_organism(
+                duck_pond,
                 dataset=selected_dataset,
                 deployment=deployment_id,
-                animal=animal_id,
+                organism=organism_id,
                 event_key=event_key,
                 datetime_start=datetime_start,
                 datetime_end=datetime_end,

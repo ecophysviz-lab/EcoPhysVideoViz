@@ -552,16 +552,17 @@ body {
     .video_available {
         // Single track container for all video indicators
         width: 100%;
+        // min-width:0 prevents this flex child from growing beyond its parent
+        // when absolutely-positioned indicator buttons overflow horizontally.
+        min-width: 0;
         height: 4px;
         background-color: rgba(var(--blue-rgb), 0.2);
         border-radius: 3px;
         z-index: 10;
         position: relative;
         margin: 10px 0;
-        // overflow:visible is required so clip-path can be applied.
-        // clip-path clips horizontally at the track edges (hiding pins outside
-        // the timeline range) while the negative top/bottom values allow the
-        // pin dots to extend vertically beyond the 4px track height.
+        // overflow:visible + clip-path: pin dots extend 8px above/below the 4px
+        // track but are clipped at the left/right edges on zoom.
         overflow: visible;
         clip-path: inset(-8px 0);
 
@@ -582,8 +583,14 @@ body {
                 // Use absolute timestamps and view bounds for zoom-aware positioning
                 // --video-start-ts, --video-end-ts set on indicator element
                 // --view-min, --view-max inherited from #video-indicators-container
-                left: calc((var(--video-start-ts) - var(--view-min)) / (var(--view-max) - var(--view-min)) * 100%);
-                width: calc((var(--video-end-ts) - var(--video-start-ts)) / (var(--view-max) - var(--view-min)) * 100%);
+                // Clamp left to 0% so the button element is always within the container
+                // (a negative left shifts the element off-screen and makes it unclickable).
+                // Compensate by shrinking width by the same clamped amount so the right
+                // edge stays correct. Right edge = min(100%, end%) handled via max-width.
+                --_start-pct: calc((var(--video-start-ts) - var(--view-min)) / (var(--view-max) - var(--view-min)) * 100%);
+                --_end-pct: calc((var(--video-end-ts) - var(--view-min)) / (var(--view-max) - var(--view-min)) * 100%);
+                left: max(0%, var(--_start-pct));
+                width: calc(min(100%, var(--_end-pct)) - max(0%, var(--_start-pct)));
                 height: 5px;
                 transform: translateY(-50%);
                 background: transparent;

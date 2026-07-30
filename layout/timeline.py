@@ -25,6 +25,21 @@ def create_timeline_section(dff, video_options=None, events_df=None):
     timestamp_min = dff["timestamp"].min()
     timestamp_max = dff["timestamp"].max()
 
+    # Extend the timeline start to cover any videos that begin before the data.
+    # This ensures the first video is always within the slider range and clickable.
+    if video_options:
+        for video in video_options:
+            created = video.get("fileCreatedAt", "")
+            if created:
+                try:
+                    video_start_ts = datetime.fromisoformat(
+                        created.replace("Z", "+00:00")
+                    ).timestamp()
+                    if video_start_ts < timestamp_min:
+                        timestamp_min = video_start_ts
+                except Exception:
+                    pass
+
     # Generate video indicators from real video data
     video_indicators = []
     if video_options:
@@ -238,6 +253,7 @@ def create_timeline_section(dff, video_options=None, events_df=None):
                                 ),
                             ],
                             className="",
+                            style={"minWidth": 0},
                         ),
                     ],
                     align="center",
@@ -251,8 +267,10 @@ def create_timeline_section(dff, video_options=None, events_df=None):
     )
 
 
-def create_deployment_info_display(animal_id, deployment_date, icon_url=None):
-    """Create the animal/deployment info display at bottom of footer."""
+def create_deployment_info_display(organism_id, deployment_date, icon_url=None, animal_id=None):
+    """Create the organism/deployment info display at bottom of footer."""
+    # Support legacy animal_id kwarg for backward compat
+    organism_id = organism_id or animal_id
     # Parse deployment date
     date_dt = pd.to_datetime(deployment_date)
     date_str = date_dt.strftime("%B %d, %Y")
@@ -286,7 +304,7 @@ def create_deployment_info_display(animal_id, deployment_date, icon_url=None):
                         [
                             html.Strong(
                                 [
-                                    animal_id,
+                                    organism_id,
                                 ],
                             ),
                         ],

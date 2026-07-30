@@ -12,7 +12,7 @@ logger = get_logger("layout")
 
 def create_dataset_accordion_item(dataset_name, deployments, item_id):
     """Create accordion item for a dataset with deployment buttons inside."""
-    # Get icon from first deployment's animal (with fallback to default)
+    # Get icon from first deployment's organism (with fallback to default)
     icon_url = "/assets/images/seal.svg"  # Default fallback
     if deployments and len(deployments) > 0:
         icon_url = deployments[0].get("icon_url", "/assets/images/seal.svg")
@@ -24,7 +24,10 @@ def create_dataset_accordion_item(dataset_name, deployments, item_id):
             [
                 html.Div(
                     [
-                        html.Strong(f"{dep['animal']}"),
+                        # "organism" post-rename; "animal" for older DiveDB packages
+                        html.Strong(
+                            f"{dep.get('organism') or dep.get('animal', '')}"
+                        ),
                         html.Br(),
                         html.Small(f"{dep['deployment_date']}", className="text-muted"),
                         html.Br(),

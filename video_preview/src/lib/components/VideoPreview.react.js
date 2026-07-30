@@ -27,23 +27,33 @@ const VideoPreview = ({
   const lastSeekTime = useRef(0); // Throttle seeking operations
   const lastActiveState = useRef(null); // Track active state to avoid unnecessary re-renders
 
-  // Reset video state when videoSrc changes
+  // Reset video state when videoSrc changes, then immediately re-evaluate active state
   useEffect(() => {
     if (videoSrc) {
       setDuration(0);
-      setIsVideoActive(false);
-      setControlsVisible(showControls); // Reset controls state for new video
-      setLocalOffset(0); // Reset offset to 0 for new video
-      setOffsetPanelOpen(false); // Close offset panel for new video
-      setFineControlsOpen(false); // Close fine controls for new video
+      setControlsVisible(showControls);
+      setLocalOffset(0);
+      setOffsetPanelOpen(false);
+      setFineControlsOpen(false);
       lastPlayheadTime.current = null;
       lastPlayingState.current = false;
       videoStartTime.current = null;
-      lastSeekTime.current = 0; // Reset seek throttle
-      lastActiveState.current = null; // Reset active state tracking
-      
+      lastSeekTime.current = 0;
+      lastActiveState.current = null;
+
       if (videoRef.current) {
         videoRef.current.currentTime = 0;
+      }
+
+      // Re-evaluate active state immediately using current playheadTime and videoMetadata.
+      // Without this, isVideoActive stays false until the next playhead tick, which means
+      // the video appears inactive when selected by clicking or by dragging the playhead.
+      if (playheadTime && videoMetadata && videoMetadata.fileCreatedAt) {
+        const vStart = new Date(videoMetadata.fileCreatedAt.replace("Z", "+00:00")).getTime() / 1000;
+        const vEnd = vStart + (parseVideoDuration(videoMetadata.duration) || 0);
+        setIsVideoActive(playheadTime >= vStart && playheadTime <= vEnd);
+      } else {
+        setIsVideoActive(false);
       }
     }
   }, [videoSrc, showControls]);

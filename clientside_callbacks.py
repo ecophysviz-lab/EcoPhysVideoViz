@@ -102,32 +102,39 @@ def register_clientside_callbacks(app):
     # The playback manager uses requestAnimationFrame instead of server round-trips.
     app.clientside_callback(
         """
-        function(n_clicks, timestamps, playbackRate, currentTime, sliderMin) {
+        function(n_clicks, timestamps, playbackRate, currentTime, sliderMin, selectedVideo, timeOffset) {
+            const noUpdate = window.dash_clientside.no_update;
+
             // Get the playback manager
             const mgr = window.DiveDBPlayback;
-            if (!mgr) {
-                // Fallback to simple toggle if manager not loaded
-                if (n_clicks % 2 === 1) {
-                    return [true, 'Pause', 'btn btn-primary btn-round btn-pause btn-lg'];
-                } else {
-                    return [false, 'Play', 'btn btn-primary btn-round btn-play btn-lg'];
-                }
-            }
-            
-            // Toggle based on n_clicks parity
+
             if (n_clicks % 2 === 1) {
-                // Starting playback - initialize and start the manager
-                mgr.init(
-                    timestamps || [],
-                    playbackRate || 1,
-                    currentTime || sliderMin || 0
-                );
+                // Starting playback — check if playhead is before the selected video's start.
+                // If so, snap the playhead to the video start so isActive becomes true
+                // and the video loads immediately rather than waiting for the playhead
+                // to reach the video by itself.
+                let startTime = currentTime || sliderMin || 0;
+                let newPlayhead = noUpdate;
+
+                if (selectedVideo && selectedVideo.fileCreatedAt) {
+                    const offset = timeOffset || 0;
+                    const videoStart = new Date(selectedVideo.fileCreatedAt).getTime() / 1000 + offset;
+                    if (currentTime < videoStart) {
+                        startTime = videoStart;
+                        newPlayhead = videoStart;
+                    }
+                }
+
+                if (!mgr) {
+                    return [true, 'Pause', 'btn btn-primary btn-round btn-pause btn-lg', newPlayhead];
+                }
+                mgr.init(timestamps || [], playbackRate || 1, startTime);
                 mgr.start();
-                return [true, 'Pause', 'btn btn-primary btn-round btn-pause btn-lg'];
+                return [true, 'Pause', 'btn btn-primary btn-round btn-pause btn-lg', newPlayhead];
             } else {
                 // Stopping playback
-                mgr.stop();
-                return [false, 'Play', 'btn btn-primary btn-round btn-play btn-lg'];
+                if (mgr) mgr.stop();
+                return [false, 'Play', 'btn btn-primary btn-round btn-play btn-lg', noUpdate];
             }
         }
         """,
@@ -135,6 +142,7 @@ def register_clientside_callbacks(app):
             Output("is-playing", "data"),
             Output("play-button", "children"),
             Output("play-button", "className"),
+            Output("playhead-time", "data", allow_duplicate=True),
         ],
         [Input("play-button", "n_clicks")],
         [
@@ -142,6 +150,8 @@ def register_clientside_callbacks(app):
             State("playback-rate", "data"),
             State("playhead-time", "data"),
             State("playhead-slider", "min"),
+            State("selected-video", "data"),
+            State("video-time-offset", "data"),
         ],
         prevent_initial_call=False,
     )

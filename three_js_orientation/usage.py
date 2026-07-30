@@ -11,7 +11,7 @@ app = dash.Dash(__name__)
 duck_pond = DuckPond.from_environment()
 dff = duck_pond.get_data(
     dataset="EP Physiology",
-    animal_ids="oror-002",
+    organism_ids="oror-002",
     frequency=1,
     labels=[
         "signal_data_depth",

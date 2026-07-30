@@ -1,7 +1,7 @@
 # AUTO GENERATED FILE - DO NOT EDIT
 
 import typing  # noqa: F401
-from typing_extensions import TypedDict, NotRequired, Literal  # noqa: F401
+from typing_extensions import TypedDict, NotRequired, Literal # noqa: F401
 from dash.development.base_component import Component, _explicitize_args
 
 ComponentType = typing.Union[
@@ -22,30 +22,30 @@ class VideoPreview(Component):
     """A VideoPreview component.
 
 
-    Keyword arguments:
+Keyword arguments:
 
-    - id (string; optional)
+- id (string; optional)
 
-    - datasetStartTime (number; optional)
+- datasetStartTime (number; optional)
 
-    - isPlaying (boolean; default False)
+- isPlaying (boolean; default False)
 
-    - playbackRate (number; default 1)
+- playbackRate (number; default 1)
 
-    - playheadTime (number; optional)
+- playheadTime (number; optional)
 
-    - showControls (boolean; default True)
+- showControls (boolean; default True)
 
-    - timeOffset (number; default 0)
+- timeOffset (number; default 0)
 
-    - videoMetadata (dict; optional)
+- videoMetadata (dict; optional)
 
-    - videoSrc (string; optional)"""
-
+- videoSrc (string; optional)"""
     _children_props = []
-    _base_nodes = ["children"]
-    _namespace = "video_preview"
-    _type = "VideoPreview"
+    _base_nodes = ['children']
+    _namespace = 'video_preview'
+    _type = 'VideoPreview'
+
 
     def __init__(
         self,
@@ -59,40 +59,17 @@ class VideoPreview(Component):
         playbackRate: typing.Optional[NumberType] = None,
         showControls: typing.Optional[bool] = None,
         timeOffset: typing.Optional[NumberType] = None,
-        **kwargs,
+        **kwargs
     ):
-        self._prop_names = [
-            "id",
-            "datasetStartTime",
-            "isPlaying",
-            "playbackRate",
-            "playheadTime",
-            "showControls",
-            "style",
-            "timeOffset",
-            "videoMetadata",
-            "videoSrc",
-        ]
-        self._valid_wildcard_attributes = []
-        self.available_properties = [
-            "id",
-            "datasetStartTime",
-            "isPlaying",
-            "playbackRate",
-            "playheadTime",
-            "showControls",
-            "style",
-            "timeOffset",
-            "videoMetadata",
-            "videoSrc",
-        ]
-        self.available_wildcard_properties = []
-        _explicit_args = kwargs.pop("_explicit_args")
+        self._prop_names = ['id', 'datasetStartTime', 'isPlaying', 'playbackRate', 'playheadTime', 'showControls', 'style', 'timeOffset', 'videoMetadata', 'videoSrc']
+        self._valid_wildcard_attributes =            []
+        self.available_properties = ['id', 'datasetStartTime', 'isPlaying', 'playbackRate', 'playheadTime', 'showControls', 'style', 'timeOffset', 'videoMetadata', 'videoSrc']
+        self.available_wildcard_properties =            []
+        _explicit_args = kwargs.pop('_explicit_args')
         _locals = locals()
         _locals.update(kwargs)  # For wildcard attrs and excess named props
         args = {k: _locals[k] for k in _explicit_args}
 
         super(VideoPreview, self).__init__(**args)
-
 
 setattr(VideoPreview, "__init__", _explicitize_args(VideoPreview.__init__))
